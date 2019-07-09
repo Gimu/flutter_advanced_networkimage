@@ -2,7 +2,6 @@ import 'dart:ui' show ImageFilter;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:flutter_advanced_networkimage/provider.dart';
 import 'package:flutter_advanced_networkimage/transition.dart';
@@ -24,8 +23,6 @@ class MyApp extends StatefulWidget {
 
 class Example extends State<MyApp> {
   final String url = 'https://flutter.io/images/flutter-logo-sharing.png';
-  final String svgUrl =
-      'https://flutter.dev/assets/flutter-lockup-4cb0ee072ab312e59784d9fbf4fb7ad42688a7fdaea1270ccf6bbf4f34b7e03f.svg';
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +44,7 @@ class Example extends State<MyApp> {
         body: TabBarView(
           physics: const NeverScrollableScrollPhysics(),
           children: <Widget>[
-            LoadImage(url: url, svgUrl: svgUrl),
+            LoadImage(url: url),
             ZoomableImage(url: url),
             ZoomableImages(url: url),
             CropImage(url: url),
@@ -59,10 +56,9 @@ class Example extends State<MyApp> {
 }
 
 class LoadImage extends StatelessWidget {
-  const LoadImage({@required this.url, @required this.svgUrl});
+  const LoadImage({@required this.url});
 
   final String url;
-  final String svgUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -107,14 +103,6 @@ class LoadImage extends StatelessWidget {
               ),
             );
           },
-        ),
-        Expanded(
-          child: SvgPicture(
-            AdvancedNetworkSvg(
-              svgUrl,
-              SvgPicture.svgByteDecoder,
-            ),
-          ),
         ),
       ],
     );

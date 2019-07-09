@@ -16,16 +16,6 @@ void main() {
               1.0, const Duration(seconds: 5), null, null,
               printError: true),
           result);
-
-      url =
-          'https://flutter.dev/assets/flutter-lockup-4cb0ee072ab312e59784d9fbf4fb7ad42688a7fdaea1270ccf6bbf4f34b7e03f.svg';
-      result = (await http.get(url)).bodyBytes;
-
-      expect(
-          await loadFromRemote(url, null, 5, const Duration(milliseconds: 100),
-              1.0, const Duration(seconds: 5), null, null,
-              printError: true),
-          result);
     });
     test('=> good url with progress', () async {
       var url = 'this is a label';
@@ -46,25 +36,6 @@ void main() {
           ),
           result);
 
-      url = 'this is another label';
-      realUrl =
-          'https://flutter.dev/assets/flutter-lockup-4cb0ee072ab312e59784d9fbf4fb7ad42688a7fdaea1270ccf6bbf4f34b7e03f.svg';
-      result = (await http.get(realUrl)).bodyBytes;
-
-      expect(
-          await loadFromRemote(
-            url,
-            null,
-            5,
-            const Duration(milliseconds: 100),
-            1.0,
-            const Duration(seconds: 5),
-            (_, v) => print(v),
-            () => Future.value(realUrl),
-            printError: true,
-          ),
-          result);
-    });
     test('=> bad url', () async {
       var url =
           'https://assets-cdn.github.com/images/modules/logos_page/GitHub-Mark.png';
