@@ -3,14 +3,20 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'raw_image.dart' show MyRawImage;
-
 import 'package:flutter_advanced_networkimage/provider.dart';
+import 'package:flutter_advanced_networkimage/src/utils.dart';
+
+import 'raw_image.dart' show MyRawImage;
 
 typedef Widget LoadingWidgetBuilder(
   BuildContext context,
   double progress,
   Uint8List imageData,
+);
+
+typedef Widget PlaceHolderBuilder(
+  BuildContext context,
+  VoidCallback reloadImage,
 );
 
 class TransitionToImage extends StatefulWidget {
@@ -27,8 +33,9 @@ class TransitionToImage extends StatefulWidget {
     this.repeat = ImageRepeat.noRepeat,
     this.matchTextDirection = false,
     this.invertColors = false,
-    // this.imageFilter,
+    this.imageFilter,
     this.placeholder: const Icon(Icons.clear),
+    this.placeholderBuilder,
     this.duration: const Duration(milliseconds: 300),
     this.tween,
     this.curve: Curves.easeInOut,
@@ -36,6 +43,7 @@ class TransitionToImage extends StatefulWidget {
     this.loadingWidget = const Center(child: const CircularProgressIndicator()),
     this.loadingWidgetBuilder,
     this.enableRefresh: false,
+    this.longPressForceRefresh: false,
     this.disableMemoryCache: false,
     this.disableMemoryCacheIfFailed: false,
     this.loadedCallback,
@@ -54,6 +62,7 @@ class TransitionToImage extends StatefulWidget {
         assert(transitionType != null),
         assert(loadingWidget != null),
         assert(enableRefresh != null),
+        assert(longPressForceRefresh != null),
         assert(disableMemoryCache != null),
         assert(disableMemoryCacheIfFailed != null),
         assert(forceRebuildWidget != null),
@@ -161,10 +170,14 @@ class TransitionToImage extends StatefulWidget {
   ///  * [Paint.invertColors], for the dart:ui implementation.
   final bool invertColors;
 
-  // final ImageFilter imageFilter;
+  final ImageFilter imageFilter;
 
   /// Widget displayed while the target [image] failed to load.
   final Widget placeholder;
+
+  /// Widget builder (with reload function) displayed
+  /// while the target [image] failed to load.
+  final PlaceHolderBuilder placeholderBuilder;
 
   /// The duration of the fade-out animation for the result.
   final Duration duration;
@@ -182,11 +195,14 @@ class TransitionToImage extends StatefulWidget {
   final Widget loadingWidget;
 
   /// Widget builder (with loading progress) displayed
-  /// when the target [image] is loading and loadingWidget is null.
+  /// when the target [image] is loading.
   final LoadingWidgetBuilder loadingWidgetBuilder;
 
-  /// Enable an internal [GestureDetector] for manually refreshing.
+  /// Enable manually refreshing for network issues.
   final bool enableRefresh;
+
+  /// force long press to refetch image.
+  final bool longPressForceRefresh;
 
   /// If set to enable, the image provider will be evicted from [ImageCache].
   final bool disableMemoryCache;
@@ -325,9 +341,17 @@ class _TransitionToImageState extends State<TransitionToImage>
 
   void _getImage({bool reload: false}) {
     if (reload) {
-      if (widget.printError) debugPrint('Reloading image.');
+      if (widget.printError) print('Reloading image.');
 
       _imageProvider.evict();
+      if (widget.longPressForceRefresh &&
+          _imageProvider is AdvancedNetworkImage) {
+        removeFromCache(
+          uid((_imageProvider as AdvancedNetworkImage).url),
+          useCacheRule:
+              (_imageProvider as AdvancedNetworkImage).cacheRule == null,
+        );
+      }
     }
 
     final ImageStream oldImageStream = _imageStream;
@@ -387,7 +411,7 @@ class _TransitionToImageState extends State<TransitionToImage>
   }
 
   void _catchBadImage(dynamic exception, StackTrace stackTrace) {
-    if (widget.printError) debugPrint('$exception\n$stackTrace');
+    if (widget.printError) print('$exception\n$stackTrace');
     setState(() => _status = _TransitionStatus.failed);
     _resolveStatus();
 
@@ -399,12 +423,14 @@ class _TransitionToImageState extends State<TransitionToImage>
   @override
   Widget build(BuildContext context) {
     return _status == _TransitionStatus.failed
-        ? widget.enableRefresh
-            ? GestureDetector(
-                onTap: () => _getImage(reload: true),
-                child: widget.placeholder,
-              )
-            : widget.placeholder
+        ? widget.placeholderBuilder != null
+            ? widget.placeholderBuilder(context, () => _getImage(reload: true))
+            : widget.enableRefresh
+                ? GestureDetector(
+                    onTap: () => _getImage(reload: true),
+                    child: widget.placeholder,
+                  )
+                : widget.placeholder
         : _status == _TransitionStatus.start ||
                 _status == _TransitionStatus.loading
             ? widget.loadingWidgetBuilder != null
@@ -431,8 +457,8 @@ class _TransitionToImageState extends State<TransitionToImage>
                   );
   }
 
-  MyRawImage buildRawImage() {
-    return MyRawImage(
+  Widget buildRawImage() {
+    MyRawImage image = MyRawImage(
       image: _imageInfo?.image,
       width: widget.width,
       height: widget.height,
@@ -444,7 +470,14 @@ class _TransitionToImageState extends State<TransitionToImage>
       repeat: widget.repeat,
       matchTextDirection: widget.matchTextDirection,
       invertColors: widget.invertColors,
-      // imageFilter: widget.imageFilter,
+      imageFilter: widget.imageFilter,
     );
+
+    return widget.longPressForceRefresh
+        ? GestureDetector(
+            onLongPress: () => _getImage(reload: true),
+            child: image,
+          )
+        : image;
   }
 }

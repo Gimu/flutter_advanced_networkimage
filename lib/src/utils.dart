@@ -3,7 +3,10 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter_advanced_networkimage/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/widgets.dart';
 
 /// Calculate crc32 checksum
@@ -294,6 +297,9 @@ int crc32(List<int> bytes) {
 typedef Future<String> UrlResolver();
 typedef void LoadingProgress(double progress, List<int> data);
 
+/// Get uid from hashCode.
+String uid(String str) => str.hashCode.toString();
+
 /// Fetch the image from network.
 Future<Uint8List> loadFromRemote(
   String url,
@@ -304,12 +310,14 @@ Future<Uint8List> loadFromRemote(
   Duration timeoutDuration,
   LoadingProgress loadingProgress,
   UrlResolver getRealUrl, {
+  List<int> skipRetryStatusCode,
   bool printError = false,
 }) async {
   assert(url != null);
   assert(retryLimit != null);
 
   if (retryLimit < 0) retryLimit = 0;
+  skipRetryStatusCode ??= [];
 
   /// Retry mechanism.
   Future<http.Response> run<T>(Future f(), int retryLimit,
@@ -317,12 +325,17 @@ Future<Uint8List> loadFromRemote(
     for (int t in List.generate(retryLimit + 1, (int t) => t + 1)) {
       try {
         http.Response res = await f();
-        if (res != null && res.bodyBytes.length > 0) {
-          if (res.statusCode == HttpStatus.ok)
+        if (res != null) {
+          if ([HttpStatus.ok, HttpStatus.partialContent]
+                  .contains(res.statusCode) &&
+              res.bodyBytes.length > 0) {
             return res;
-          else if (printError)
-            debugPrint('Load error, response status code: ' +
-                res.statusCode.toString());
+          } else {
+            if (printError)
+              debugPrint(
+                  'Failed to load, response status code: ${res.statusCode.toString()}.');
+            if (skipRetryStatusCode.contains(res.statusCode)) return null;
+          }
         }
       } catch (e) {
         if (printError) debugPrint(e.toString());
@@ -334,6 +347,9 @@ Future<Uint8List> loadFromRemote(
     return null;
   }
 
+  List<int> buffer = [];
+  bool acceptRangesHeader = false;
+
   http.Response _response;
   _response = await run(() async {
     String _url = url;
@@ -342,8 +358,13 @@ Future<Uint8List> loadFromRemote(
     if (loadingProgress != null) {
       final _req = http.Request('GET', Uri.parse(_url));
       _req.headers.addAll(header ?? {});
+      if (!acceptRangesHeader)
+        _req.headers[HttpHeaders.rangeHeader] = 'bytes=${buffer.length}-';
       final _res = await _req.send().timeout(timeoutDuration);
-      List<int> buffer = [];
+      acceptRangesHeader =
+          _res.headers.containsKey(HttpHeaders.acceptRangesHeader) &&
+              _res.headers[HttpHeaders.acceptRangesHeader] == 'bytes';
+      if (!acceptRangesHeader) buffer.clear();
       final Completer<http.Response> completer = Completer<http.Response>();
       _res.stream.listen(
         (bytes) {
@@ -377,8 +398,24 @@ Future<Uint8List> loadFromRemote(
   return null;
 }
 
-/// Get uid from hashCode.
-String uid(String str) => str.hashCode.toString();
+Future<bool> removeFromCache(String url, {bool useCacheRule = false}) async {
+  if (url == null) return false;
+
+  String uId = uid(url);
+
+  try {
+    if (useCacheRule) {
+      return await DiskCache().evict(uId);
+    } else {
+      await File(join((await getTemporaryDirectory()).path, 'imagecache', uId))
+          .delete();
+      return true;
+    }
+  } catch (e) {
+    print(e);
+    return false;
+  }
+}
 
 bool get isInDebugMode {
   bool inDebugMode = false;

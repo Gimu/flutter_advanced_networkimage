@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/services.dart';
+import 'package:path/path.dart';
 import 'package:test/test.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 
 import 'package:flutter_advanced_networkimage/src/utils.dart';
 
@@ -30,7 +35,7 @@ void main() {
             const Duration(milliseconds: 100),
             1.0,
             const Duration(seconds: 5),
-            (_, v) => print(v),
+            (_, v) => print(v.length),
             () => Future.value(realUrl),
             printError: true,
           ),
@@ -41,9 +46,9 @@ void main() {
           'https://assets-cdn.github.com/images/modules/logos_page/GitHub-Mark.png';
 
       expect(
-          await loadFromRemote(url, null, 0, const Duration(milliseconds: 100),
+          await loadFromRemote(url, null, 5, const Duration(milliseconds: 100),
               1.0, const Duration(seconds: 5), null, null,
-              printError: true),
+              skipRetryStatusCode: [404], printError: true),
           null);
     });
     test('=> not a url', () async {
@@ -54,6 +59,35 @@ void main() {
               1.0, const Duration(seconds: 5), null, null,
               printError: true),
           null);
+    });
+  });
+  group('Other Test', () {
+    test('=> crc32', () {
+      expect(crc32(utf8.encode('hello world')), 222957957);
+      expect(
+          crc32(utf8.encode('The quick brown fox jumps over the lazy dog'))
+              .toRadixString(16),
+          '414fa339');
+    });
+    test('=> remove from cache', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const MethodChannel('plugins.flutter.io/path_provider')
+          .setMockMethodCallHandler((MethodCall methodCall) async {
+        if (methodCall.method == 'getApplicationDocumentsDirectory') {
+          Directory dir = Directory(join(Directory.current.path, 'tmp', 'app'));
+          if (!dir.existsSync()) dir.createSync(recursive: true);
+          return dir.path;
+        } else if (methodCall.method == 'getTemporaryDirectory') {
+          Directory dir =
+              Directory(join(Directory.current.path, 'tmp', 'temp'));
+          if (!dir.existsSync()) dir.createSync(recursive: true);
+          return dir.path;
+        }
+        return null;
+      });
+
+      expect(await removeFromCache('hello', useCacheRule: false), false);
+      expect(await removeFromCache('world', useCacheRule: true), false);
     });
   });
 }
